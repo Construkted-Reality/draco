@@ -15,7 +15,10 @@
 #include "draco/attributes/point_attribute.h"
 
 #include <tuple>
+#include <type_traits>
 #include <unordered_map>
+
+#include "draco/attributes/flat_dedup_table.h"
 using std::unordered_map;
 
 // Shortcut for typed conditionals.
@@ -166,40 +169,72 @@ AttributeValueIndex::ValueType PointAttribute::DeduplicateFormattedValues(
   AttributeValueIndex unique_vals(0);
   typedef std::array<T, num_components_t> AttributeValue;
   typedef std::array<HashType, num_components_t> AttributeHashableValue;
-  typedef unordered_map<AttributeHashableValue, AttributeValueIndex,
-                        HashArray<AttributeHashableValue>>
-      ValueToIndexMap;
 
-  // Hash map storing index of the first attribute with a given value.
-  ValueToIndexMap value_to_index_map;
   AttributeValue att_value;
   AttributeHashableValue hashable_value;
   IndexTypeVector<AttributeValueIndex, AttributeValueIndex> value_map(
       num_unique_entries_);
-  for (AttributeValueIndex i(0); i < num_unique_entries_; ++i) {
-    const AttributeValueIndex att_pos = i + in_att_offset;
-    att_value = in_att.GetValue<T, num_components_t>(att_pos);
-    // Convert the value to hashable type. Bit-copy real attributes to integers.
-    memcpy(&(hashable_value[0]), &(att_value[0]), sizeof(att_value));
 
-    typename ValueToIndexMap::iterator it;
-    bool inserted;
-    std::tie(it, inserted) = value_to_index_map.insert(
-        std::pair<AttributeHashableValue, AttributeValueIndex>(hashable_value,
-                                                               unique_vals));
+  if constexpr (std::is_same<T, float>::value && num_components_t == 3 &&
+                sizeof(HashType) == 4) {
+    // Fast path for the common three-component float attribute (e.g. positions
+    // and texture coordinates). A flat open-addressing table avoids the
+    // per-node allocation and pointer chasing of std::unordered_map. First
+    // occurrences are assigned unique indices in input order, exactly as the
+    // map-based path below, so the resulting mapping is identical.
+    FlatDedupTableU32x3 value_to_index_map(num_unique_entries_);
+    for (AttributeValueIndex i(0); i < num_unique_entries_; ++i) {
+      const AttributeValueIndex att_pos = i + in_att_offset;
+      att_value = in_att.GetValue<T, num_components_t>(att_pos);
+      // Bit-copy the float components to integers for hashing.
+      memcpy(&(hashable_value[0]), &(att_value[0]), sizeof(att_value));
 
-    // Try to update the hash map with a new entry pointing to the latest unique
-    // vertex index.
-    if (!inserted) {
-      // Duplicated value found. Update index mapping.
-      value_map[i] = it->second;
-    } else {
-      // New unique value.
-      SetAttributeValue(unique_vals, &att_value);
-      // Update index mapping.
-      value_map[i] = unique_vals;
+      const std::pair<uint32_t, bool> result = value_to_index_map.Insert(
+          hashable_value[0], hashable_value[1], hashable_value[2],
+          unique_vals.value());
+      if (!result.second) {
+        // Duplicated value found. Update index mapping.
+        value_map[i] = AttributeValueIndex(result.first);
+      } else {
+        // New unique value.
+        SetAttributeValue(unique_vals, &att_value);
+        value_map[i] = unique_vals;
+        ++unique_vals;
+      }
+    }
+  } else {
+    typedef unordered_map<AttributeHashableValue, AttributeValueIndex,
+                          HashArray<AttributeHashableValue>>
+        ValueToIndexMap;
 
-      ++unique_vals;
+    // Hash map storing index of the first attribute with a given value.
+    ValueToIndexMap value_to_index_map;
+    for (AttributeValueIndex i(0); i < num_unique_entries_; ++i) {
+      const AttributeValueIndex att_pos = i + in_att_offset;
+      att_value = in_att.GetValue<T, num_components_t>(att_pos);
+      // Convert the value to hashable type. Bit-copy real attributes to
+      // integers.
+      memcpy(&(hashable_value[0]), &(att_value[0]), sizeof(att_value));
+
+      typename ValueToIndexMap::iterator it;
+      bool inserted;
+      std::tie(it, inserted) = value_to_index_map.insert(
+          std::pair<AttributeHashableValue, AttributeValueIndex>(hashable_value,
+                                                                 unique_vals));
+
+      // Try to update the hash map with a new entry pointing to the latest
+      // unique vertex index.
+      if (!inserted) {
+        // Duplicated value found. Update index mapping.
+        value_map[i] = it->second;
+      } else {
+        // New unique value.
+        SetAttributeValue(unique_vals, &att_value);
+        // Update index mapping.
+        value_map[i] = unique_vals;
+
+        ++unique_vals;
+      }
     }
   }
   if (unique_vals == num_unique_entries_) {

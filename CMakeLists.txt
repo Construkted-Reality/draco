@@ -99,6 +99,7 @@ list(
          "${draco_src_root}/attributes/attribute_transform.h"
          "${draco_src_root}/attributes/attribute_transform_data.h"
          "${draco_src_root}/attributes/attribute_transform_type.h"
+         "${draco_src_root}/attributes/flat_dedup_table.h"
          "${draco_src_root}/attributes/geometry_attribute.cc"
          "${draco_src_root}/attributes/geometry_attribute.h"
          "${draco_src_root}/attributes/geometry_indices.h"
