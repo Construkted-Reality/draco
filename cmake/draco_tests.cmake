@@ -52,6 +52,7 @@ list(
     "${draco_src_root}/compression/point_cloud/point_cloud_sequential_encoding_test.cc"
     "${draco_src_root}/core/buffer_bit_coding_test.cc"
     "${draco_src_root}/core/math_utils_test.cc"
+    "${draco_src_root}/core/options_test.cc"
     "${draco_src_root}/core/quantization_utils_test.cc"
     "${draco_src_root}/core/status_test.cc"
     "${draco_src_root}/core/vector_d_test.cc"

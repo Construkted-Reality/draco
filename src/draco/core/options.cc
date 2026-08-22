@@ -32,7 +32,7 @@ void Options::SetInt(const std::string &name, int val) {
 }
 
 void Options::SetFloat(const std::string &name, float val) {
-  options_[name] = std::to_string(val);
+  options_[name] = OptionValueToString(val);
 }
 
 void Options::SetBool(const std::string &name, bool val) {

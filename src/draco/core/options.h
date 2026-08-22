@@ -15,6 +15,7 @@
 #ifndef DRACO_CORE_OPTIONS_H_
 #define DRACO_CORE_OPTIONS_H_
 
+#include <cstdio>
 #include <cstdlib>
 #include <map>
 #include <string>
@@ -27,6 +28,41 @@ namespace draco {
 // The API provides helper methods for directly storing values of various types
 // such as ints and bools. One named option should be set with only a single
 // data type.
+
+// Converts an option value to the string form used by the option store.
+//
+// std::to_string formats a float or a double in fixed notation with 6 decimal
+// places. A binary32 whose unit in the last place is smaller than 1e-6, which
+// is any value below about 8.4, therefore does not survive the round trip.
+// That matters because ExpertEncoder::SetAttributeExplicitQuantization passes
+// the quantization origin and range through this store: an origin near the
+// coordinate frame origin comes back one unit in the last place wrong, and
+// every decoded position moves off the intended grid.
+//
+// %.9g round-trips binary32 exactly and %.17g does the same for binary64.
+inline std::string OptionValueToString(float val) {
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%.9g", val);
+  return std::string(buf);
+}
+
+inline std::string OptionValueToString(double val) {
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%.17g", val);
+  return std::string(buf);
+}
+
+template <typename DataTypeT>
+inline std::string OptionValueToString(const DataTypeT &val) {
+// GNU STL on android doesn't include a proper std::to_string, but the libc++
+// version does
+#if defined(ANDROID) && !defined(_LIBCPP_VERSION)
+  return to_string(val);
+#else
+  return std::to_string(val);
+#endif
+}
+
 class Options {
  public:
   Options() = default;
@@ -85,14 +121,7 @@ void Options::SetVector(const std::string &name, const DataTypeT *vec,
     if (i > 0) {
       out += " ";
     }
-
-// GNU STL on android doesn't include a proper std::to_string, but the libc++
-// version does
-#if defined(ANDROID) && !defined(_LIBCPP_VERSION)
-    out += to_string(vec[i]);
-#else
-    out += std::to_string(vec[i]);
-#endif
+    out += OptionValueToString(vec[i]);
   }
   options_[name] = out;
 }
