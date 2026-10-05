@@ -33,3 +33,39 @@ round-trip exactly. It keeps the Android fallback for the other types. It adds
 here.
 
 Upstream status: not yet reported.
+
+## fix/rans-bit-encoder-destructor
+
+Branched from `fix/options-float-precision` at 618e9bf. This branch holds both
+patches.
+
+The destructor of `RAnsBitEncoder` calls `Clear`. `Clear` calls
+`bit_counts_.assign(2, 0)`, which allocates when the vector has no storage yet.
+A destructor is `noexcept`, so a failed allocation there terminates the
+process.
+
+The vector has no storage when `StartEncoding` did not run yet, or when its own
+allocation failed. When an encode fails with `std::bad_alloc` and memory stays
+exhausted, the stack unwinds through the destructor, the destructor allocates,
+and the process aborts. The caller cannot catch the failure. The backtraces
+show two owners: `MeshEdgebreakerEncoderImpl` and
+`MeshPredictionSchemeTexCoordsPortableEncoder::EncodePredictionData`.
+
+TileForge measured this with the allocation probe in
+`tileforge-draco/tests/native_allocation.cc`. The probe fails one allocation,
+or one allocation and every later allocation, at each `operator new` call of
+one encode and one decode. On the unpatched pin, every one of the 119
+terminating attempts stopped in this destructor. The 119 attempts came from
+four encode configurations. With the patch, the probe reports 0 terminating
+attempts, and decode never terminated.
+
+The patch removes the call to `Clear` from the destructor. The members release
+their own storage, so the destructor does nothing that the patch removes. The
+patch does not change encoded output. Measured on the 932 tile corpus in five
+encode configurations: 4,650 of 4,650 encoded buffers are byte-identical to
+the unpatched build.
+
+The patch adds no Draco unit test. The probe needs a replaced global
+`operator new`, which the Draco test binary cannot hold.
+
+Upstream status: not yet reported.

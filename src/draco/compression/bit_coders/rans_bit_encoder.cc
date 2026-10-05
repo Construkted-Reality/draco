@@ -22,7 +22,11 @@ namespace draco {
 
 RAnsBitEncoder::RAnsBitEncoder() : local_bits_(0), num_local_bits_(0) {}
 
-RAnsBitEncoder::~RAnsBitEncoder() { Clear(); }
+// The members release their own storage. The destructor does not call
+// Clear(), because Clear() can allocate. An allocation that fails inside a
+// destructor terminates the process, for example while an encode unwinds
+// after std::bad_alloc.
+RAnsBitEncoder::~RAnsBitEncoder() {}
 
 void RAnsBitEncoder::StartEncoding() { Clear(); }
 
