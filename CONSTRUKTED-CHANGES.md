@@ -97,7 +97,7 @@ before. The `draco_static` encoder objects are byte-identical to the build of
 
 The branch does not take the other upstream commits in that range. Those
 commits change encoder code, build files, file readers, point cloud decoders
-only, or release packaging.
+only, scene utilities, documentation or example files, or release packaging.
 
 Two upstream decoder changes in that range are not taken and need a decision
 of their own:
@@ -108,8 +108,15 @@ of their own:
   bitstreams hold at most 30 bits per value and cannot reach that case.
 - The 1.5.8 release commit 13445d3 holds more decoder checks (a limit on the
   number of predicted values, and an axis check in the kd-tree decoder). The
-  same commit changes encoder code, so a cherry-pick cannot take it. The
-  checks need a manual port.
+  same commit changes encoder code, so a cherry-pick cannot take it. It also
+  moves `CrossProduct` in `core/vector_d.h` to unsigned arithmetic, and the
+  encoder uses that function. The checks need a manual port.
+
+The first item of the next sync is the manual port of the limit on the number
+of predicted values. It is on the mesh decode path. At this pin,
+`mesh_prediction_scheme_tex_coords_portable_decoder.h` sizes a working array
+from a count in the bitstream and checks only the sign of the count. The
+count has 32 bits, so the array has a fixed upper size.
 
 Upstream status: these are upstream commits. Nothing to report.
 
